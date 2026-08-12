@@ -1,0 +1,5 @@
+pandas
+packaging
+transformers
+torch
+sentencepiece

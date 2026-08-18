@@ -1,0 +1,143 @@
+"""
+FastAPI backend for the CVE RAG tool.
+
+Wraps the existing, already-tested pipeline (retrieval.py, generate.py,
+parse_query.py) behind HTTP endpoints so a frontend can call it.
+
+Run with:
+    uvicorn app:app --reload --port 8000
+
+Then test in your browser at:
+    http://localhost:8000/docs   (interactive API docs, auto-generated)
+"""
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from retrieval import load_data, find_vulnerabilities
+from generate import summarize
+from parse_query import parse_query
+
+app = FastAPI(title="CVE RAG Lookup API")
+
+# Allow the React dev server (usually localhost:3000 or 5173) to call this API.
+# Tighten this to your actual frontend URL before deploying anywhere public.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Load the dataset once at startup, not on every request.
+df = load_data()
+
+
+class QueryRequest(BaseModel):
+    query: str
+
+
+class LookupRequest(BaseModel):
+    product: str
+    version: str
+
+
+class CVEResult(BaseModel):
+    cve_id: str
+    cvss: float | None
+    label: str | None
+    description: str
+    attack_vector: str | None
+    privileges: str | None
+    product: str
+    operator: str
+    version: str
+    summary: str | None = None
+
+
+class QueryResponse(BaseModel):
+    product: str | None
+    version: str | None
+    parsed_ok: bool
+    message: str | None = None
+    results: list[CVEResult] = []
+
+
+def _build_response(product: str, version: str, results_df, with_summary: bool) -> QueryResponse:
+    if results_df.empty:
+        return QueryResponse(
+            product=product,
+            version=version,
+            parsed_ok=True,
+            message=f"No known vulnerabilities found for {product} {version}.",
+            results=[],
+        )
+
+    summaries = {}
+    if with_summary:
+        for item in summarize(results_df, product, version):
+            summaries[item["cve_id"]] = item["summary"]
+
+    results = []
+    for _, row in results_df.iterrows():
+        results.append(CVEResult(
+            cve_id=row["cve_id"],
+            cvss=row["cvss"] if row["cvss"] == row["cvss"] else None,  # NaN check
+            label=row["label"],
+            description=row["description"],
+            attack_vector=row["attack_vector"],
+            privileges=row["privileges"],
+            product=row["product"],
+            operator=row["operator"],
+            version=str(row["version"]),
+            summary=summaries.get(row["cve_id"]),
+        ))
+
+    return QueryResponse(product=product, version=version, parsed_ok=True, results=results)
+
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "CVE RAG API is running. See /docs for usage."}
+
+
+@app.post("/lookup", response_model=QueryResponse)
+def lookup(req: LookupRequest):
+    """Direct lookup: explicit product + version, no parsing needed."""
+    try:
+        results_df = find_vulnerabilities(df, req.product, req.version)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _build_response(req.product, req.version, results_df, with_summary=True)
+
+
+@app.post("/query", response_model=QueryResponse)
+def query(req: QueryRequest):
+    """Free-text query: e.g. 'is pan-os 8.1.20 vulnerable?' -- parses then looks up."""
+    parsed = parse_query(req.query, df)
+
+    if not parsed["product"] or not parsed["version"]:
+        return QueryResponse(
+            product=parsed["product"],
+            version=parsed["version"],
+            parsed_ok=False,
+            message=(
+                "Couldn't detect both a product and a version in that question. "
+                f"Detected product: {parsed['product']}, detected version: {parsed['version']}."
+            ),
+            results=[],
+        )
+
+    results_df = find_vulnerabilities(df, parsed["product"], parsed["version"])
+    return _build_response(parsed["product"], parsed["version"], results_df, with_summary=True)
+
+
+@app.post("/lookup-raw", response_model=QueryResponse)
+def lookup_raw(req: LookupRequest):
+    """Same as /lookup but skips the AI summary step -- faster, for quick checks."""
+    try:
+        results_df = find_vulnerabilities(df, req.product, req.version)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _build_response(req.product, req.version, results_df, with_summary=False)

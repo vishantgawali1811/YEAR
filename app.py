@@ -21,6 +21,16 @@ from parse_query import parse_query
 
 app = FastAPI(title="CVE RAG Lookup API")
 
+
+class StatResponse(BaseModel):
+    total: int
+    critical: int
+    high: int
+    medium: int
+    low: int
+    top_product: str | None
+    top_product_count: int
+
 # Allow the React dev server (usually localhost:3000 or 5173) to call this API.
 # Tighten this to your actual frontend URL before deploying anywhere public.
 app.add_middleware(
@@ -100,6 +110,22 @@ def _build_response(product: str, version: str, results_df, with_summary: bool) 
 @app.get("/")
 def root():
     return {"status": "ok", "message": "CVE RAG API is running. See /docs for usage."}
+
+
+@app.get("/stats", response_model=StatResponse)
+def stats():
+    """Dataset summary counts for the frontend dashboard KPI tiles."""
+    label_col = df["label"].str.upper() if "label" in df.columns else None
+    top = df["product"].value_counts()
+    return StatResponse(
+        total=len(df["cve_id"].dropna().unique()),
+        critical=int((label_col == "CRITICAL").sum()) if label_col is not None else 0,
+        high=int((label_col == "HIGH").sum()) if label_col is not None else 0,
+        medium=int((label_col == "MEDIUM").sum()) if label_col is not None else 0,
+        low=int((label_col == "LOW").sum()) if label_col is not None else 0,
+        top_product=str(top.index[0]) if len(top) > 0 else None,
+        top_product_count=int(top.iloc[0]) if len(top) > 0 else 0,
+    )
 
 
 @app.post("/lookup", response_model=QueryResponse)

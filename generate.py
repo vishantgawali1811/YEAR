@@ -23,7 +23,7 @@ def _load_model():
     global _tokenizer, _model
     if _model is None:
         _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+        _model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME, attn_implementation="eager")
     return _tokenizer, _model
 
 

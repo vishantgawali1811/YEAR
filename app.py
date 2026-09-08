@@ -10,7 +10,7 @@ Run with:
 Then test in your browser at:
     http://localhost:8000/docs   (interactive API docs, auto-generated)
 """
-
+from agent import Agent, AgentResponse
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -42,6 +42,7 @@ app.add_middleware(
 
 # Load the dataset once at startup, not on every request.
 df = load_data()
+agent = Agent(df)   # reuse the already-loaded df, shared across requests
 
 
 class QueryRequest(BaseModel):
@@ -167,3 +168,13 @@ def lookup_raw(req: LookupRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _build_response(req.product, req.version, results_df, with_summary=False)
+
+@app.post("/agent-query", response_model=AgentResponse)
+def agent_query(req: QueryRequest):
+    """
+    Agentic endpoint: classifies intent (lookup/remediation/stats), routes
+    across tools accordingly, and returns a structured response including
+    risk scores and, for remediation queries, rule-based fix guidance
+    instead of a plain LLM summary.
+    """
+    return agent.run(req.query)

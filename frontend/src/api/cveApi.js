@@ -55,6 +55,23 @@ export async function queryFreeText(query) {
 }
 
 /**
+ * POST /agent-query  — intent-aware agent lookup or remediation query
+ * @param {string} query
+ */
+export async function agentQuery(query) {
+  const res = await fetch(`${BASE_URL}/agent-query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * GET /stats  — dataset summary for KPI tiles
  */
 export async function getStats() {

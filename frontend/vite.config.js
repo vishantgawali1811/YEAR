@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       '/lookup': 'http://localhost:8000',
       '/query':  'http://localhost:8000',
+      '/agent-query': 'http://localhost:8000',
       '/stats':  'http://localhost:8000',
     },
   },

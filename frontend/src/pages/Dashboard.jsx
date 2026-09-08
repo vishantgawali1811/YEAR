@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { lookupRaw, computeDRS, drsClass, labelClass } from '../api/cveApi.js';
+import { agentQuery, drsClass, labelClass } from '../api/cveApi.js';
 
 /* ── Risk colour helpers ─────────────────────────────────── */
 const RISK_COLOR = { critical: 'var(--risk-critical)', high: 'var(--risk-high)', medium: 'var(--risk-medium)', low: 'var(--risk-low)' };
@@ -48,6 +48,7 @@ export default function Dashboard({ stats }) {
   const navigate = useNavigate();
   const [product, setProduct] = useState('');
   const [version, setVersion] = useState('');
+  const [queryMode, setQueryMode] = useState('lookup');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,7 +64,12 @@ export default function Dashboard({ stats }) {
     setLoading(true);
     setSearched(false);
     try {
-      const data = await lookupRaw(product.trim().toLowerCase(), version.trim());
+      const normalizedProduct = product.trim().toLowerCase();
+      const normalizedVersion = version.trim();
+      const queryString = queryMode === 'remediation'
+        ? `how do I fix ${normalizedProduct} ${normalizedVersion}?`
+        : `is ${normalizedProduct} ${normalizedVersion} vulnerable?`;
+      const data = await agentQuery(queryString);
       setResults(data);
       setSearched(true);
     } catch (err) {
@@ -71,10 +77,10 @@ export default function Dashboard({ stats }) {
     } finally {
       setLoading(false);
     }
-  }, [product, version]);
+  }, [product, version, queryMode]);
 
   const rows = results?.results || [];
-  const enriched = rows.map(r => ({ ...r, drs: computeDRS(r.cvss, r.label, r.exploit) }));
+  const isRemediation = results?.intent === 'remediation';
 
   // Stats breakdown from props (global) or current search results
   const critCount = stats?.critical ?? 0;
@@ -113,6 +119,23 @@ export default function Dashboard({ stats }) {
       {/* ── Search form ───────────────────────────── */}
       <div className="terminal-box" style={{ padding: 'var(--sp-5)', marginBottom: 'var(--sp-5)' }}>
         <div className="terminal-box-title">// QUERY_INTERFACE</div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        {[
+          ['lookup', 'LOOKUP'],
+          ['remediation', 'FIX / REMEDIATION'],
+        ].map(([mode, label]) => (
+          <button
+            key={mode}
+            type="button"
+            className={`btn ${queryMode === mode ? '' : 'btn-ghost'}`}
+            style={{ padding: '3px 10px', fontSize: 10 }}
+            onClick={() => setQueryMode(mode)}
+            aria-pressed={queryMode === mode}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap', marginTop: 8 }}>
           <div style={{ flex: 1, minWidth: 160 }}>
             <label htmlFor="product-input" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -153,6 +176,11 @@ export default function Dashboard({ stats }) {
         {searched && !error && (
           <div style={{ marginTop: 8, fontSize: 'var(--fs-xs)', color: 'var(--primary)' }}>
             &gt; SCAN COMPLETE: {rows.length} vulnerabilit{rows.length === 1 ? 'y' : 'ies'} found for {results?.product} {results?.version}
+           {results?.intent && (
+             <span className={`badge badge-${results.intent === 'remediation' ? 'high' : 'low'}`} style={{ marginLeft: 8 }}>
+               DETECTED: {results.intent.toUpperCase()}
+             </span>
+           )}
             {results?.message && <span style={{ color: 'var(--risk-low)' }}> :: {results.message}</span>}
           </div>
         )}
@@ -182,16 +210,22 @@ export default function Dashboard({ stats }) {
                     <th>CVE ID</th>
                     <th>PRODUCT</th>
                     <th>VERSION</th>
-                    <th>CVSS</th>
-                    <th>SEVERITY</th>
-                    <th>EXPLOIT</th>
-                    <th>ATTACK VECTOR</th>
+                    {isRemediation ? (
+                      <th>REMEDIATION</th>
+                    ) : (
+                      <>
+                        <th>CVSS</th>
+                        <th>SEVERITY</th>
+                        <th>EXPLOIT</th>
+                        <th>ATTACK VECTOR</th>
+                      </>
+                    )}
                     <th>DRS SCORE</th>
                     <th>ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {enriched.map((row, i) => (
+                  {rows.map((row, i) => (
                     <tr key={`${row.cve_id}-${i}`}>
                       <td>
                         <span
@@ -210,13 +244,25 @@ export default function Dashboard({ stats }) {
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
                         {row.operator} {row.version}
                       </td>
-                      <td><CvssBar cvss={row.cvss} /></td>
-                      <td><span className={`badge badge-${labelClass(row.label)}`}>{row.label || '—'}</span></td>
-                      <td><ExploitBadge exploit={row.exploit} /></td>
-                      <td style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                        {row.attack_vector || '—'}
-                      </td>
-                      <td><DRSBadge drs={row.drs} /></td>
+                      {isRemediation ? (
+                        <td>
+                          {row.remediation?.length ? (
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {row.remediation.map((step, stepIndex) => <li key={stepIndex}>{step}</li>)}
+                            </ul>
+                          ) : '—'}
+                        </td>
+                      ) : (
+                        <>
+                          <td><CvssBar cvss={row.cvss} /></td>
+                          <td><span className={`badge badge-${labelClass(row.priority_label)}`}>{row.priority_label || '—'}</span></td>
+                          <td><ExploitBadge exploit={row.exploit} /></td>
+                          <td style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            {row.attack_vector || '—'}
+                          </td>
+                        </>
+                      )}
+                      <td><DRSBadge drs={row.risk_score} /></td>
                       <td>
                         <button
                           className="btn"

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { queryFreeText, lookupRaw, computeDRS, drsClass } from '../api/cveApi.js';
+import { agentQuery, lookupRaw, computeDRS, drsClass } from '../api/cveApi.js';
 
 const RISK_COLOR = { critical: 'var(--risk-critical)', high: 'var(--risk-high)', medium: 'var(--risk-medium)', low: 'var(--risk-low)' };
 
@@ -21,7 +21,7 @@ AVAILABLE COMMANDS:
   help                     — show this message
   clear                    — clear terminal output
   scan <product> <version> — lookup CVEs directly (no AI)
-  query <natural language> — free-text NLP query with AI summary
+  query <natural language> — intent-aware free-text CVE query
   
 EXAMPLES:
   scan pan-os 8.1.20
@@ -80,6 +80,14 @@ export default function Terminal() {
       if (r.summary) {
         addLine(`       [AI] ${r.summary}`, 'var(--text-secondary)');
       }
+      if (resp.intent === 'remediation' && r.remediation) {
+        r.remediation.forEach(step => {
+          addLine(`       ${step}`, 'var(--text-secondary)');
+        });
+      }
+      if (resp.intent === 'remediation' && r.remediation_detail) {
+        addLine(`       [DETAIL] ${r.remediation_detail}`, 'var(--text-secondary)');
+      }
     });
   }, [addLine]);
 
@@ -132,9 +140,9 @@ export default function Terminal() {
       }
       setLoading(true);
       addLine(`[NLP]  Parsing: "${question}"…`, 'var(--text-muted)');
-      addLine('[AI]   Generating Flan-T5 summaries… (may take ~20s)', 'var(--text-muted)');
+      addLine('[NLP]  Routing by intent…', 'var(--text-muted)');
       try {
-        const resp = await queryFreeText(question);
+        const resp = await agentQuery(question);
         if (resp.product && resp.version) {
           addLine(`[NLP]  Detected: product="${resp.product}" version="${resp.version}"`, 'var(--primary-dim)');
         }
@@ -151,7 +159,7 @@ export default function Terminal() {
     addLine(`[SYS]  Unknown command. Trying as NLP query…`, 'var(--text-muted)');
     setLoading(true);
     try {
-      const resp = await queryFreeText(trimmed);
+      const resp = await agentQuery(trimmed);
       if (resp.product && resp.version) {
         addLine(`[NLP]  Detected: product="${resp.product}" version="${resp.version}"`, 'var(--primary-dim)');
       }

@@ -7,7 +7,9 @@ a formatting check, a QUALITY check.
 Run with: python test_remediation.py
 """
  
-from retrieval import load_data, find_vulnerabilities
+import pandas as pd
+
+from retrieval import load_data, find_vulnerabilities, safe_version, select_version_rules
 from generate import suggest_remediation, summarize
  
 # Test against a few different product/version combos from your dataset --
@@ -17,6 +19,27 @@ TEST_CASES = [
     ("pan-os", "9.0.10"),
     ("pan-os", "10.2.0"),
 ]
+
+
+def print_branch_selection(df, product: str, version: str, cve_ids: set[str]) -> None:
+    """Print and assert the selected affected/fixed rule for each target CVE."""
+    query_v = safe_version(version)
+    product_rows = df[
+        df["product"].str.lower().str.strip() == product.lower().strip()
+    ].copy()
+    product_rows["_source_order"] = range(len(product_rows))
+    product_rows["_threshold"] = product_rows["version"].apply(safe_version)
+
+    print("\nSELECTED VERSION RULES")
+    for cve_id in sorted(cve_ids):
+        group = product_rows[product_rows["cve_id"] == cve_id].dropna(
+            subset=["_threshold"]
+        )
+        affected, fixed = select_version_rules(group, query_v)
+        assert affected is not None, f"{cve_id} did not match {product} {version}"
+        affected_rule = f"{affected['operator']} {affected['version']}"
+        fixed_rule = f"{fixed['operator']} {fixed['version']}" if fixed is not None else "unavailable"
+        print(f"  {cve_id}: affected={affected_rule}; fixed={fixed_rule}")
  
  
 def run_case(product: str, version: str):
@@ -65,6 +88,23 @@ def check_for_repetition(all_outputs: list[str]) -> None:
  
 if __name__ == "__main__":
     df = load_data()
+    android_results = find_vulnerabilities(df, "android", "12.0")
+    assert not android_results.empty
+    assert all(row["operator"] == "==" for _, row in android_results.iterrows())
+    assert all(pd.isna(row.get("fixed_version")) for _, row in android_results.iterrows())
+    print(f"\nANDROID EXACT-VERSION FALLBACK: {len(android_results)} CVEs found for android 12.0")
+    print_branch_selection(
+        df,
+        "pan-os",
+        "8.1.20",
+        {
+            "CVE-2024-0007",
+            "CVE-2024-0008",
+            "CVE-2024-0009",
+            "CVE-2024-0010",
+            "CVE-2024-0011",
+        },
+    )
     all_remediation_texts = []
  
     for product, version in TEST_CASES:

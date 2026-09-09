@@ -339,7 +339,13 @@ def suggest_remediation(results: pd.DataFrame, detailed: bool = True) -> list[di
         vendor_mitigation = facts["vendor_mitigation"]
 
         if fixed_version:
-            primary = f"PRIMARY REMEDIATION: Upgrade {product} to {fixed_version} or later."
+            if "," in fixed_version:
+                primary = (
+                    f"PRIMARY REMEDIATION: Upgrade {product} to one of the "
+                    f"dataset-listed fixed versions: {fixed_version}."
+                )
+            else:
+                primary = f"PRIMARY REMEDIATION: Upgrade {product} to {fixed_version} or later."
         elif vendor_remediation:
             primary = f"PRIMARY REMEDIATION: {vendor_remediation}"
         else:
@@ -348,6 +354,8 @@ def suggest_remediation(results: pd.DataFrame, detailed: bool = True) -> list[di
                 f"release containing the security fix; an exact fixed version is "
                 f"not provided for this CVE."
             )
+        if facts["description"]:
+            primary = f"{primary} This addresses the verified CVE issue: {facts['description']}"
 
         steps = [
             f"AFFECTED VERSION: {product} {operator} {affected_version}.",

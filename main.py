@@ -12,6 +12,8 @@ import argparse
 from retrieval import load_data, find_vulnerabilities, DEFAULT_DATA_FILE
 from generate import summarize
 from parse_query import parse_query
+from intent import classify_intent
+from agent import Agent
 
 
 def print_raw(results, product, version):
@@ -39,6 +41,17 @@ def run_query(df, product: str, version: str, raw: bool = False):
             print(f"    {item['summary']}\n")
 
 
+def run_remediation_query(agent: Agent, query: str) -> None:
+    response = agent.run(query)
+    if response.message:
+        print(f"\n{response.message}\n")
+        return
+    for result in response.results:
+        print(f"\n{result.cve_id}:")
+        for step in result.remediation or []:
+            print(f"  - {step}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="RAG CVE lookup: product + version -> grounded summary.")
     parser.add_argument("--product", help="Product / tech stack name, e.g. pan-os")
@@ -51,6 +64,11 @@ def main():
     df = load_data(args.data)
 
     if args.query:
+        detected_intent = classify_intent(args.query)
+        print(f"Detected intent: {detected_intent}")
+        if detected_intent == "remediation":
+            run_remediation_query(Agent(df), args.query)
+            return
         parsed = parse_query(args.query, df)
         if not parsed["product"] or not parsed["version"]:
             print(f"\nCouldn't work out both a product and a version from: \"{args.query}\"")
@@ -71,6 +89,11 @@ def main():
         question = input("Ask: ").strip()
         if question.lower() in {"quit", "exit"}:
             break
+        detected_intent = classify_intent(question)
+        print(f"Detected intent: {detected_intent}")
+        if detected_intent == "remediation":
+            run_remediation_query(Agent(df), question)
+            continue
         parsed = parse_query(question, df)
         if not parsed["product"] or not parsed["version"]:
             print(f"  Couldn't detect both a product and version.")

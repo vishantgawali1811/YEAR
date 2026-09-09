@@ -67,6 +67,7 @@ class Agent:
             )
  
         intent = classify_intent(query)
+        print(f"Detected intent: {intent}")
         parsed = parse_query(query, self.df)
  
         product, version = parsed["product"], parsed["version"]

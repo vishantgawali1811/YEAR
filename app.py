@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from retrieval import load_data, find_vulnerabilities
 from generate import summarize
 from parse_query import parse_query
+from intent import classify_intent
 
 app = FastAPI(title="CVE RAG Lookup API")
 
@@ -139,9 +140,14 @@ def lookup(req: LookupRequest):
     return _build_response(req.product, req.version, results_df, with_summary=True)
 
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query", response_model=QueryResponse | AgentResponse)
 def query(req: QueryRequest):
     """Free-text query: e.g. 'is pan-os 8.1.20 vulnerable?' -- parses then looks up."""
+    detected_intent = classify_intent(req.query)
+    print(f"Detected intent: {detected_intent}")
+    if detected_intent == "remediation":
+        return agent.run(req.query)
+
     parsed = parse_query(req.query, df)
 
     if not parsed["product"] or not parsed["version"]:

@@ -42,6 +42,52 @@ def condition_holds(query_v: Version, operator: str, threshold_v: Version) -> bo
     return False
 
 
+def select_version_rules(
+    group: pd.DataFrame, query_v: Version
+) -> tuple[pd.Series | None, pd.Series | None]:
+    """Select the affected rule and its corresponding fixed rule for one CVE.
+
+    The CSV has no branch identifier. Its row order is therefore used only to
+    associate a non-equal fixed row with the affected row that precedes it.
+    Exact boundary matches are preferred and prevent unrelated branches from
+    being selected.
+    """
+    affected_rows = group[group["operator"] != "=="]
+    satisfied = [
+        row for _, row in group.iterrows()
+        if row["operator"] != "==" and condition_holds(
+            query_v, row["operator"], row["_threshold"]
+        )
+    ]
+    if not satisfied:
+        # Some legacy product records contain only exact-version rows and no
+        # affected-range rows. Treat an exact match as affected only for that
+        # shape; never reinterpret == rows when < rows exist for the CVE.
+        exact_only = group[
+            (group["operator"] == "==") & (group["_threshold"] == query_v)
+        ]
+        if affected_rows.empty and not exact_only.empty:
+            return exact_only.iloc[0], None
+        return None, None
+
+    affected = min(satisfied, key=lambda row: row["_threshold"])
+    fixed_rows = group[group["operator"] == "=="]
+    exact_fixed = fixed_rows[fixed_rows["_threshold"] == affected["_threshold"]]
+    if not exact_fixed.empty:
+        return affected, exact_fixed.iloc[0]
+    if fixed_rows.empty:
+        return affected, None
+
+    affected_order = affected["_source_order"]
+    nearest_fixed_index = min(
+        fixed_rows.index,
+        key=lambda index: abs(
+            fixed_rows.loc[index, "_source_order"] - affected_order
+        ),
+    )
+    return affected, fixed_rows.loc[nearest_fixed_index]
+
+
 def load_data(path: Path = DEFAULT_DATA_FILE) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
@@ -64,28 +110,37 @@ def find_vulnerabilities(df: pd.DataFrame, product: str, version: str) -> pd.Dat
     if query_v is None:
         raise ValueError(f"'{version}' is not a parseable version string (expected e.g. 9.0.5).")
 
-    product_rows = df[df["product"].str.lower().str.strip() == product.lower().strip()].copy()
+    product_rows = df[
+        df["product"].str.lower().str.strip() == product.lower().strip()
+    ].copy()
     if product_rows.empty:
         return product_rows
 
+    product_rows["_source_order"] = range(len(product_rows))
     product_rows["_threshold"] = product_rows["version"].apply(safe_version)
     product_rows = product_rows.dropna(subset=["_threshold"])
 
     matches = []
-    for cve_id, group in product_rows.groupby("cve_id"):
-        satisfied = [
-            row for _, row in group.iterrows()
-            if condition_holds(query_v, row["operator"], row["_threshold"])
-        ]
-        if not satisfied:
+    for _, group in product_rows.groupby("cve_id"):
+        affected, fixed = select_version_rules(group, query_v)
+        if affected is None:
             continue
-        best = min(satisfied, key=lambda r: r["_threshold"])
-        matches.append(best)
+        affected["selected_affected_rule"] = (
+            f"{affected['operator']} {affected['version']}"
+        )
+        if fixed is not None:
+            affected["fixed_version"] = str(fixed["_threshold"])
+            affected["selected_fixed_rule"] = (
+                f"{fixed['operator']} {fixed['version']}"
+            )
+        matches.append(affected)
 
     if not matches:
         return pd.DataFrame(columns=df.columns)
 
-    result = pd.DataFrame(matches).drop(columns=["_threshold"])
+    result = pd.DataFrame(matches).drop(
+        columns=["_threshold", "_source_order"], errors="ignore"
+    )
     return result.sort_values("cvss", ascending=False, na_position="last")
 
 

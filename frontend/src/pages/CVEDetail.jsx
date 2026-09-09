@@ -255,7 +255,38 @@ export default function CVEDetail() {
             </p>
           </div>
 
-          {/* D: AI Narrative */}
+          {/* D: Defensive verification flow */}
+          <div className="terminal-box" style={{ padding: 'var(--sp-5)', paddingTop: 'var(--sp-6)', marginBottom: 'var(--sp-4)' }}>
+            <div className="terminal-box-title">// DEFENSIVE_VERIFICATION_FLOW</div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, marginBottom: 16 }}>
+              Non-invasive checks for {cveId}; do not send exploit payloads or attempt unauthorized access.
+            </p>
+            {[
+              ['1', `Identify ${row.product} ${opPhrase[row.operator] || row.operator} ${row.version}.`],
+              ['2', 'Confirm the affected component and review safe exposure/configuration evidence.'],
+              ['3', 'Collect version output, configuration, logs, asset ownership, and vendor advisory references.'],
+              ['4', 'Prioritize using the verified CVE facts, CVSS, attack vector, privileges, and local context.'],
+              ['5', 'Apply the dataset-listed fixed version or documented vendor mitigation.'],
+              ['6', 'Recheck the version/configuration, rescan safely, and record remediation evidence.'],
+            ].map(([step, text], index, steps) => (
+              <div key={step} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{
+                  minWidth: 28, height: 28, border: '1px solid var(--primary)', color: 'var(--primary)',
+                  display: 'grid', placeItems: 'center', fontFamily: 'var(--font-mono)', fontWeight: 700,
+                }}>
+                  {step}
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, paddingTop: 3 }}>
+                  {text}
+                  {index < steps.length - 1 && (
+                    <div style={{ color: 'var(--primary-dim)', fontFamily: 'var(--font-mono)', marginTop: 5 }}>↓</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* E: AI Narrative */}
           <div className="terminal-box" style={{ padding: 'var(--sp-5)', paddingTop: 'var(--sp-6)', marginBottom: 'var(--sp-4)' }}>
             <div className="terminal-box-title">// AI_ATTACK_NARRATIVE</div>
             <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--primary-dim)', marginBottom: 8 }}>

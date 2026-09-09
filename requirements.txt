@@ -1,0 +1,7 @@
+pandas
+packaging
+transformers
+torch
+sentencepiece
+fastapi
+uvicorn[standard]

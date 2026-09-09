@@ -24,7 +24,10 @@ import threading
 import pandas as pd
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-from groq import Groq
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
  
 MODEL_NAME = "google/flan-t5-base"
 MAX_INPUT_TOKENS = 512
@@ -143,9 +146,11 @@ def summarize(results: pd.DataFrame, product: str, version: str) -> list[dict]:
 # ============================================================
  
 def _get_groq_client():
-    """Lazy-init. Returns None if no API key is set -- callers must treat
+    """Lazy-init. Returns None if no API key is set or groq library not installed -- callers must treat
     that as 'detail unavailable' and fall back to the rule-based steps."""
     global _groq_client
+    if Groq is None:
+        return None
     if _groq_client is None:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:

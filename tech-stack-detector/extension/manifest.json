@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "TechStack Detector",
+  "version": "1.0.0",
+  "description": "Detect technologies and tech stacks on any website. Click a version to instantly query your CVE Intelligence Engine.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost:5175/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "TechStack Detector",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [],
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

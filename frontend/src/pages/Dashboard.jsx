@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { agentQuery, drsClass, labelClass } from '../api/cveApi.js';
 
@@ -53,6 +53,41 @@ export default function Dashboard({ stats }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
+  const [extensionDetection, setExtensionDetection] = useState(null); // { technology, version }
+  const autoScanFired = useRef(false);
+
+  /* ── Read URL params from TechStack Detector extension ──────────────── */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const techParam    = params.get('technology');
+    const versionParam = params.get('version');
+
+    if (techParam && versionParam) {
+      // Sanitize: strip anything that isn't printable ASCII
+      const safeTech    = techParam.replace(/[^\x20-\x7E]/g, '').trim().slice(0, 100);
+      const safeVersion = versionParam.replace(/[^\x20-\x7E]/g, '').trim().slice(0, 50);
+
+      setProduct(safeTech.toLowerCase().replace(/\s+/g, '_'));
+      setVersion(safeVersion);
+      setExtensionDetection({ technology: safeTech, version: safeVersion });
+
+      // Remove params from URL bar without reload (clean UX)
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  }, []);
+
+  /* ── Auto-scan when extension populates the fields ───────────────────── */
+  useEffect(() => {
+    if (!extensionDetection || autoScanFired.current || !product || !version) return;
+    autoScanFired.current = true;
+    // Small delay so the UI can render the banner first
+    const timer = setTimeout(() => {
+      handleSearch({ preventDefault: () => {} });
+    }, 600);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extensionDetection, product, version]);
 
   const handleSearch = useCallback(async (e) => {
     e.preventDefault();
@@ -82,6 +117,24 @@ export default function Dashboard({ stats }) {
   const rows = results?.results || [];
   const isRemediation = results?.intent === 'remediation';
 
+  /* ── Extension detection banner styles ───────────────────────────────── */
+  const bannerStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    padding: '12px 16px',
+    marginBottom: 'var(--sp-4)',
+    border: '1px solid var(--primary)',
+    background: 'rgba(0,255,65,0.06)',
+    boxShadow: '0 0 12px rgba(0,255,65,0.15)',
+    position: 'relative',
+  };
+  const bannerDismissStyle = {
+    position: 'absolute', top: 8, right: 10,
+    background: 'none', border: 'none', color: 'var(--text-muted)',
+    cursor: 'pointer', fontSize: 14, lineHeight: 1,
+  };
+
   // Stats breakdown from props (global) or current search results
   const critCount = stats?.critical ?? 0;
   const highCount  = stats?.high     ?? 0;
@@ -107,6 +160,37 @@ export default function Dashboard({ stats }) {
           <div>MODEL: FLAN-T5-BASE</div>
         </div>
       </div>
+
+      {/* ── Extension Detection Banner ────────────── */}
+      {extensionDetection && (
+        <div style={bannerStyle} role="status" aria-live="polite">
+          <button
+            style={bannerDismissStyle}
+            onClick={() => setExtensionDetection(null)}
+            aria-label="Dismiss extension banner"
+          >✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--primary)', fontSize: 16 }}>✓</span>
+            <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Technology detected from TechStack Detector
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-sm)', paddingLeft: 24 }}>
+            <span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Technology&nbsp;</span>
+              <span style={{ color: 'var(--primary)', fontWeight: 700 }}>{extensionDetection.technology}</span>
+            </span>
+            <span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Version&nbsp;</span>
+              <span style={{ color: 'var(--primary)', fontWeight: 700 }}>{extensionDetection.version}</span>
+            </span>
+          </div>
+          <div style={{ paddingLeft: 24, fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
+            <span className="badge badge-low" style={{ marginRight: 8, padding: '1px 6px', fontSize: 9 }}>SOURCE</span>
+            Browser Extension · Auto-scanning for CVEs…
+          </div>
+        </div>
+      )}
 
       {/* ── KPI Cards ─────────────────────────────── */}
       <div className="grid-4" style={{ marginBottom: 'var(--sp-6)' }}>

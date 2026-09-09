@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TechStack Detector</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-logo">
+      <span class="header-icon">⚡</span>
+      <span class="header-title">TechStack Detector</span>
+    </div>
+    <div class="header-status" id="status-dot">
+      <span class="live-dot"></span>
+      <span class="status-text" id="status-text">READY</span>
+    </div>
+  </header>
+
+  <!-- ── Site Info ───────────────────────────────────────────────────────── -->
+  <div class="site-bar" id="site-bar">
+    <span class="site-icon">🌐</span>
+    <span class="site-hostname" id="site-hostname">—</span>
+  </div>
+
+  <!-- ── Scan Button ────────────────────────────────────────────────────── -->
+  <div class="scan-section">
+    <button class="scan-btn" id="scan-btn">
+      <span class="scan-btn-icon">🔍</span>
+      <span id="scan-btn-text">[ SCAN WEBSITE ]</span>
+    </button>
+    <div class="scan-hint" id="scan-hint">Click to detect technologies on this page</div>
+  </div>
+
+  <!-- ── States ─────────────────────────────────────────────────────────── -->
+
+  <!-- Loading -->
+  <div class="state-box hidden" id="state-loading">
+    <div class="spinner"></div>
+    <div class="state-title">Scanning page…</div>
+    <div class="state-sub">Analyzing scripts, styles and globals</div>
+  </div>
+
+  <!-- Error -->
+  <div class="state-box hidden" id="state-error">
+    <div class="state-icon">⚠️</div>
+    <div class="state-title" id="error-title">Unable to scan</div>
+    <div class="state-sub" id="error-detail">This page cannot be analyzed.</div>
+  </div>
+
+  <!-- No Results -->
+  <div class="state-box hidden" id="state-empty">
+    <div class="state-icon">🔎</div>
+    <div class="state-title">No technologies detected</div>
+    <div class="state-sub">
+      Try a more complex page, or this site may use server-side rendering only.
+    </div>
+  </div>
+
+  <!-- ── Results ────────────────────────────────────────────────────────── -->
+  <div id="results-container" class="hidden">
+    <div class="results-header">
+      <span class="results-count" id="results-count"></span>
+      <span class="results-label">DETECTED TECHNOLOGIES</span>
+    </div>
+
+    <div id="results-list">
+      <!-- Tech cards rendered dynamically by popup.js -->
+    </div>
+  </div>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <span>Click a version badge to query your CVE Engine</span>
+    <span class="footer-dot">·</span>
+    <span class="footer-link" id="footer-settings">⚙ Settings</span>
+  </footer>
+
+  <!-- ── Settings Panel (hidden by default) ────────────────────────────── -->
+  <div class="settings-panel hidden" id="settings-panel">
+    <div class="settings-title">// SETTINGS</div>
+    <label class="settings-label" for="project-url-input">Project Website URL</label>
+    <input
+      type="text"
+      id="project-url-input"
+      class="settings-input"
+      placeholder="http://localhost:5175"
+    />
+    <button class="settings-save-btn" id="save-settings-btn">[ SAVE ]</button>
+    <div class="settings-hint" id="settings-save-hint"></div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

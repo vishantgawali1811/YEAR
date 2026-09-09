@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { agentQuery, drsClass, labelClass } from '../api/cveApi.js';
 
@@ -53,6 +53,8 @@ export default function Dashboard({ stats }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
+  const [extensionDetection, setExtensionDetection] = useState(null);
+  const autoScanFired = useRef(false);
 
   const handleSearch = useCallback(async (e) => {
     e.preventDefault();
@@ -78,6 +80,27 @@ export default function Dashboard({ stats }) {
       setLoading(false);
     }
   }, [product, version, queryMode]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const technology = params.get('technology');
+    const detectedVersion = params.get('version');
+    if (!technology || !detectedVersion) return;
+
+    const safeTechnology = technology.replace(/[^\x20-\x7E]/g, '').trim().slice(0, 100);
+    const safeVersion = detectedVersion.replace(/[^\x20-\x7E]/g, '').trim().slice(0, 50);
+    setProduct(safeTechnology.toLowerCase().replace(/\s+/g, '_'));
+    setVersion(safeVersion);
+    setExtensionDetection({ technology: safeTechnology, version: safeVersion });
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
+  useEffect(() => {
+    if (!extensionDetection || autoScanFired.current || !product || !version) return;
+    autoScanFired.current = true;
+    const timer = setTimeout(() => handleSearch({ preventDefault: () => {} }), 600);
+    return () => clearTimeout(timer);
+  }, [extensionDetection, product, version, handleSearch]);
 
   const rows = results?.results || [];
   const exploitRecommendations = results?.exploit_recommendations || [];
@@ -108,6 +131,36 @@ export default function Dashboard({ stats }) {
           <div>MODEL: FLAN-T5-BASE</div>
         </div>
       </div>
+
+      {extensionDetection && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 6,
+            padding: '12px 16px', marginBottom: 'var(--sp-4)',
+            border: '1px solid var(--primary)', background: 'rgba(0,255,65,0.06)',
+            boxShadow: '0 0 12px rgba(0,255,65,0.15)', position: 'relative',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setExtensionDetection(null)}
+            aria-label="Dismiss extension detection"
+            style={{ position: 'absolute', top: 8, right: 10, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}
+          >x</button>
+          <div style={{ color: 'var(--primary)', fontSize: 'var(--fs-sm)', fontWeight: 700, textTransform: 'uppercase' }}>
+            Technology detected from TechStack Detector
+          </div>
+          <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-sm)' }}>
+            <span>Technology: <strong>{extensionDetection.technology}</strong></span>
+            <span>Version: <strong>{extensionDetection.version}</strong></span>
+          </div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
+            Browser extension source; CVE and exploit scanning started automatically.
+          </div>
+        </div>
+      )}
 
       {/* ── KPI Cards ─────────────────────────────── */}
       <div className="grid-4" style={{ marginBottom: 'var(--sp-6)' }}>

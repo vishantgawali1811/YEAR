@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { queryFreeText, lookupRaw, computeDRS, drsClass } from '../api/cveApi.js';
+import { agentQuery, lookupRaw, computeDRS, drsClass } from '../api/cveApi.js';
 
 const RISK_COLOR = { critical: 'var(--risk-critical)', high: 'var(--risk-high)', medium: 'var(--risk-medium)', low: 'var(--risk-low)' };
 
@@ -134,7 +134,7 @@ export default function Terminal() {
       addLine(`[NLP]  Parsing: "${question}"…`, 'var(--text-muted)');
       addLine('[AI]   Generating Flan-T5 summaries… (may take ~20s)', 'var(--text-muted)');
       try {
-        const resp = await queryFreeText(question);
+        const resp = await agentQuery(question);
         if (resp.product && resp.version) {
           addLine(`[NLP]  Detected: product="${resp.product}" version="${resp.version}"`, 'var(--primary-dim)');
         }
@@ -151,7 +151,7 @@ export default function Terminal() {
     addLine(`[SYS]  Unknown command. Trying as NLP query…`, 'var(--text-muted)');
     setLoading(true);
     try {
-      const resp = await queryFreeText(trimmed);
+      const resp = await agentQuery(trimmed);
       if (resp.product && resp.version) {
         addLine(`[NLP]  Detected: product="${resp.product}" version="${resp.version}"`, 'var(--primary-dim)');
       }
